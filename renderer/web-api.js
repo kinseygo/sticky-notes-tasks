@@ -87,19 +87,47 @@
     const t = new Date(s).getTime();
     return Number.isNaN(t) ? null : t;
   }
+  function recurApplies(t, d) {
+    switch (t.type) {
+      case 'daily': return true;
+      case 'weekdays': return d.getDay() >= 1 && d.getDay() <= 5;
+      case 'weekly': return d.getDay() === Number(t.weekday == null ? 1 : t.weekday);
+      case 'monthly': return d.getDate() === Number(t.monthDay || 1);
+      case 'yearly': return (d.getMonth() + 1) === Number(t.yearMonth || 1) && d.getDate() === Number(t.yearDay || 1);
+      default: return false;
+    }
+  }
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function dateKey(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+
   function checkReminders() {
     const data = readJson(LS.data, null);
     if (!data || !Array.isArray(data.tasks) || !remindCb || !isUnlocked()) return;
     const now = Date.now();
+    const d = new Date();
     for (const t of data.tasks) {
-      if (t.done || !t.id || !t.due) continue;
-      const key = t.id + ':' + t.due;
-      if (reminded.has(key)) continue;
-      const ms = dueMs(t.due);
-      if (ms == null) continue;
-      if (now >= ms) {
-        reminded.set(key, now);
-        if (now - ms <= 30 * 60 * 1000) remindCb({ id: t.id, title: t.title || '（无标题任务）', locked: false });
+      if (!t.id || t.remind === false) continue;
+      if (t.type && t.type !== 'once') {
+        if (!recurApplies(t, d)) continue;
+        const key = t.id + ':' + dateKey(d) + ':' + (t.time || '09:00');
+        if (reminded.has(key)) continue;
+        const [hh, mm] = String(t.time || '09:00').split(':').map(Number);
+        const x = new Date(d); x.setHours(hh || 0, mm || 0, 0, 0);
+        const ms = x.getTime();
+        if (now >= ms) {
+          reminded.set(key, now);
+          if (now - ms <= 30 * 60 * 1000) remindCb({ id: t.id, title: t.title || '（无标题任务）', locked: false });
+        }
+      } else {
+        if (t.done || !t.due) continue;
+        const key = t.id + ':' + t.due;
+        if (reminded.has(key)) continue;
+        const ms = dueMs(t.due);
+        if (ms == null) continue;
+        if (now >= ms) {
+          reminded.set(key, now);
+          if (now - ms <= 30 * 60 * 1000) remindCb({ id: t.id, title: t.title || '（无标题任务）', locked: false });
+        }
       }
     }
   }
@@ -108,10 +136,20 @@
     const data = readJson(LS.data, null);
     if (!data || !Array.isArray(data.tasks)) return;
     const now = Date.now();
+    const d = new Date();
     for (const t of data.tasks) {
-      if (t.done || !t.id || !t.due) continue;
-      const ms = dueMs(t.due);
-      if (ms != null && now >= ms) reminded.set(t.id + ':' + t.due, now);
+      if (!t.id || t.remind === false) continue;
+      if (t.type && t.type !== 'once') {
+        if (!recurApplies(t, d)) continue;
+        const key = t.id + ':' + dateKey(d) + ':' + (t.time || '09:00');
+        const [hh, mm] = String(t.time || '09:00').split(':').map(Number);
+        const x = new Date(d); x.setHours(hh || 0, mm || 0, 0, 0);
+        if (now >= x.getTime()) reminded.set(key, now);
+      } else {
+        if (t.done || !t.due) continue;
+        const ms = dueMs(t.due);
+        if (ms != null && now >= ms) reminded.set(t.id + ':' + t.due, now);
+      }
     }
   })();
   setInterval(checkReminders, 30 * 1000);
