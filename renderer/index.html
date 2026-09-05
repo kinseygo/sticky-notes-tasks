@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="便签与任务">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="../assets/icon.png">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https: http:">
+<title>便签与任务</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="mobile.css">
+</head>
+<body>
+
+<!-- ================= 封面（密码锁） ================= -->
+<div id="cover">
+  <div class="cover-panel">
+    <div class="cover-inner">
+      <div class="cover-emblem">📝</div>
+      <h1 class="cover-title">便签与任务</h1>
+      <p class="cover-sub">STICKY NOTES &amp; TASKS</p>
+      <p class="cover-motto">山登绝顶私人定制</p>
+      <div class="cover-form" id="cover-unlock">
+        <input id="cover-pass" type="password" placeholder="请输入密码解锁" autocomplete="off">
+        <button id="cover-unlock-btn" class="cover-btn">解 锁</button>
+        <p id="cover-err" class="cover-err"></p>
+      </div>
+      <div class="cover-form hidden" id="cover-setup">
+        <input id="cover-pass-new" type="password" placeholder="设置密码（至少 4 位）" autocomplete="off">
+        <input id="cover-pass-new2" type="password" placeholder="再输入一次确认" autocomplete="off">
+        <button id="cover-setup-btn" class="cover-btn">设为登录密码</button>
+        <button id="cover-skip-btn" class="cover-skip">暂不设置，直接进入 ›</button>
+        <p id="cover-err2" class="cover-err"></p>
+      </div>
+      <p class="cover-foot">数据保存在本机 · 支持 WebDAV 云备份</p>
+    </div>
+  </div>
+</div>
+
+<!-- 归档分类选择浮层 -->
+<div id="cat-pop" class="hidden"></div>
+
+<header class="topbar">
+  <nav class="tabs">
+    <button class="tab active" data-tab="notes">📝 便签</button>
+    <button class="tab" data-tab="tasks">✅ 任务</button>
+  </nav>
+  <div class="toolbar">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input id="search" type="text" placeholder="搜索便签 / 任务…">
+    </div>
+    <button id="btn-lock" class="icon-btn hidden" title="锁定（回到封面）">🔒</button>
+    <button id="btn-theme" class="icon-btn" title="切换深色 / 浅色">🌙</button>
+    <button id="btn-settings" class="icon-btn" title="云备份与设置">⚙️</button>
+  </div>
+</header>
+
+<main>
+  <!-- ================= 便签页 ================= -->
+  <section id="page-notes" class="page active">
+    <div class="page-toolbar">
+      <button id="btn-new-note" class="primary-btn">＋ 新建便签</button>
+      <span id="notes-count" class="count-chip"></span>
+      <span class="spacer"></span>
+      <button id="btn-archive" class="ghost-btn">📦 归档库</button>
+      <button id="btn-trash" class="ghost-btn">🗑 回收站</button>
+    </div>
+    <div id="notes-grid" class="notes-grid"></div>
+    <!-- 便签翻页控件 -->
+    <div id="notes-pager" class="notes-pager hidden">
+      <button id="btn-page-prev" class="ghost-btn" title="上一页">◀</button>
+      <span id="notes-page-label" class="count-chip"></span>
+      <button id="btn-page-next" class="ghost-btn" title="下一页">▶</button>
+    </div>
+    <div id="notes-empty" class="empty hidden">
+      <div class="empty-emoji">📝</div>
+      <div class="empty-title">还没有便签</div>
+      <div class="empty-sub">点击「＋ 新建便签」，或按 Ctrl+N 开始记录</div>
+    </div>
+  </section>
+
+  <!-- ================= 任务页 ================= -->
+  <section id="page-tasks" class="page">
+    <div class="task-overview">
+      <div class="ring-wrap">
+        <svg width="116" height="116" viewBox="0 0 120 120">
+          <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
+          <circle id="ring-fg" class="ring-fg" cx="60" cy="60" r="52"></circle>
+        </svg>
+        <div class="ring-center">
+          <b id="ring-pct">0%</b>
+          <span>完成率</span>
+        </div>
+      </div>
+      <div class="overview-stats">
+        <div class="stat"><b id="stat-todo">0</b><span>待办</span></div>
+        <div class="stat"><b id="stat-done">0</b><span>已完成</span></div>
+        <div class="stat"><b id="stat-today">0</b><span>今日完成</span></div>
+      </div>
+    </div>
+
+    <div class="task-add">
+      <input id="task-input" type="text" placeholder="添加任务，回车保存…">
+      <select id="task-priority" title="优先级">
+        <option value="0">⚪ 无</option>
+        <option value="1">🟡 中</option>
+        <option value="2">🔴 高</option>
+      </select>
+      <input id="task-due" type="datetime-local" title="截止时间（到点自动提醒）">
+      <button id="task-copy" class="icon-btn" title="一键复制输入内容">📋</button>
+    </div>
+
+    <div class="task-groups">
+      <div class="task-group">
+        <h3 class="group-title">⏳ 待办 <span id="todo-count" class="badge"></span></h3>
+        <div id="todo-list" class="task-list"></div>
+      </div>
+      <div class="task-group">
+        <h3 class="group-title">🎉 已完成 <span id="done-count" class="badge"></span></h3>
+        <div id="done-list" class="task-list"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ================= 设置 / 云备份弹窗 ================= -->
+<div id="modal-settings" class="modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2>⚙️ 设置与云备份</h2>
+      <button class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <section class="setting-sec">
+        <h4>🚀 通用</h4>
+        <label class="switch-row">
+          <input type="checkbox" id="chk-launch">
+          <span class="switch"></span>
+          <span>开机自动启动<small>（启动后静默驻留托盘，不会打扰）</small></span>
+        </label>
+      </section>
+
+      <section class="setting-sec">
+        <h4>🔓 密码保护（封面登录）</h4>
+        <p id="pw-status" class="hint"></p>
+        <div class="form-grid">
+          <label id="lbl-pw-current">当前密码</label>
+          <input id="pw-current" type="password" placeholder="输入当前密码" autocomplete="off">
+          <label id="lbl-pw-new">新密码</label>
+          <input id="pw-new" type="password" placeholder="至少 4 位" autocomplete="off">
+          <label>确认新密码</label>
+          <input id="pw-new2" type="password" placeholder="再次输入新密码" autocomplete="off">
+        </div>
+        <div class="btn-row">
+          <button id="btn-pw-save" class="primary-btn">保存新密码</button>
+          <button id="btn-pw-disable" class="danger-btn">关闭密码保护</button>
+        </div>
+        <p class="hint">开启后每次启动（或从托盘重新打开）都会先显示书本封面，输入密码才能进入。密码在本机加密存储，忘记密码可通过「关闭密码保护」验证当前密码后移除。</p>
+      </section>
+
+      <section class="setting-sec">
+        <h4>💾 手动备份</h4>
+        <div class="btn-row">
+          <button id="btn-export-json" class="ghost-btn">📤 导出备份文件（JSON）</button>
+          <button id="btn-import-json" class="ghost-btn">📥 从文件恢复</button>
+        </div>
+        <p class="hint">导出的 JSON 包含全部便签、归档、回收站与任务，可自行存放到网盘或 U 盘。</p>
+      </section>
+
+      <section class="setting-sec">
+        <h4>☁️ WebDAV 云备份 <small>（支持坚果云、Nextcloud、Alist 等）</small></h4>
+        <div class="form-grid">
+          <label>服务器地址</label>
+          <input id="wd-server" type="text" placeholder="https://dav.jianguanyun.com/dav/">
+          <label>账号</label>
+          <input id="wd-user" type="text" placeholder="邮箱或用户名">
+          <label>应用密码</label>
+          <input id="wd-pass" type="password" placeholder="网盘的应用密码">
+        </div>
+        <div class="btn-row">
+          <button id="btn-wd-test" class="ghost-btn">🔌 测试连接</button>
+          <button id="btn-wd-backup" class="primary-btn">☁ 立即备份</button>
+          <button id="btn-wd-restore" class="ghost-btn">⬇ 从云端恢复</button>
+        </div>
+        <div class="form-grid">
+          <label>自动备份</label>
+          <select id="auto-backup">
+            <option value="0">关闭</option>
+            <option value="1">每 1 小时</option>
+            <option value="6">每 6 小时</option>
+            <option value="24">每 24 小时</option>
+          </select>
+        </div>
+        <p id="last-backup" class="hint">上次备份：从未</p>
+        <p class="hint">坚果云请在「账户信息 → 安全选项」中生成<b>应用密码</b>使用；地址填到完整目录，如 <code>https://dav.jianguanyun.com/dav/</code>。密码在本机加密保存。</p>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- ================= 归档库弹窗 ================= -->
+<div id="modal-archive" class="modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2>📦 归档库 <span id="archive-count" class="badge"></span></h2>
+      <div class="btn-row">
+        <button id="btn-export-md" class="ghost-btn">📄 导出 Markdown</button>
+        <button id="btn-export-txt" class="ghost-btn">📃 导出 TXT</button>
+        <button class="modal-close">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="archive-tabs" class="archive-tabs"></div>
+      <div id="archive-list" class="row-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 回收站弹窗 ================= -->
+<div id="modal-trash" class="modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2>🗑 回收站 <span id="trash-count" class="badge"></span></h2>
+      <div class="btn-row">
+        <button id="btn-clear-trash" class="danger-btn">清空回收站</button>
+        <button class="modal-close">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="trash-list" class="row-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 归档详情弹窗 ================= -->
+<div id="modal-archview" class="modal">
+  <div class="modal-box archview-box">
+    <div class="modal-head">
+      <h2>📄 便签详情 <span id="archview-badge"></span></h2>
+      <button class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="archview-meta" class="hint"></p>
+      <textarea id="archview-text" readonly spellcheck="false"></textarea>
+      <p class="hint">提示：内容可直接选中，也可右键复制所选片段。</p>
+      <div class="btn-row">
+        <button id="btn-archview-copy" class="primary-btn">📋 一键复制全文</button>
+        <button class="ghost-btn modal-close2">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="web-api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

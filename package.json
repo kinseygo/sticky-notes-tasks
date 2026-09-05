@@ -1,0 +1,54 @@
+{
+  "name": "sticky-notes-tasks",
+  "version": "1.5.0",
+  "description": "PC 便签 + 任务进度 + 云备份（WebDAV / 导出导入）",
+  "main": "main.js",
+  "author": "gjxin",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "icon": "node make-icon.js",
+    "build": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.gjxin.sticky-notes-tasks",
+    "productName": "便签与任务",
+    "copyright": "Copyright © 2026 gjxin",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "debug-main.js",
+      "renderer/",
+      "assets/",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "assets/1557-256.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "便签与任务v1.5-Setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "便签与任务v1.5-portable.${ext}"
+    },
+    "extraResources": [
+      {
+        "from": "assets/",
+        "to": "assets/"
+      }
+    ]
+  }
+}

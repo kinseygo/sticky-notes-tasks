@@ -1,0 +1,16 @@
+{
+  "name": "便签与任务",
+  "short_name": "便签",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f2f0eb",
+  "theme_color": "#f2f0eb",
+  "icons": [
+    {
+      "src": "../assets/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
