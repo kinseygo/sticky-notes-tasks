@@ -201,6 +201,28 @@
         <p class="hint">坚果云请在「账户信息 → 安全选项」中生成<b>应用密码</b>使用；地址填到完整目录，如 <code>https://dav.jianguanyun.com/dav/</code>。密码在本机加密保存。</p>
       </section>
 
+      <section class="setting-sec">
+        <h4>🔄 GitHub 云同步 <small>（PC 与手机同账户同步）</small></h4>
+        <div class="form-grid">
+          <label>GitHub 用户名</label>
+          <input id="gh-user" type="text" placeholder="GitHub 用户名">
+          <label>访问令牌</label>
+          <input id="gh-token" type="password" placeholder="粘贴含 repo 权限的令牌（仅存本机）">
+        </div>
+        <div class="btn-row">
+          <button id="gh-btn-bind" class="primary-btn">🔗 绑定并开启同步</button>
+          <button id="gh-btn-push" class="ghost-btn">☁ 推送到云端</button>
+          <button id="gh-btn-pull" class="ghost-btn">⬇ 拉取云端</button>
+        </div>
+        <label class="switch-row">
+          <input type="checkbox" id="gh-sync-on">
+          <span class="switch"></span>
+          <span>改动后自动同步</span>
+        </label>
+        <p id="gh-status" class="hint">未绑定</p>
+        <p class="hint">数据保存在你自己账号下的<b>私有仓库</b> <code>sticky-notes-sync</code>，令牌仅存本机。令牌获取：GitHub → Settings → Developer settings → Personal access tokens → Generate new token，勾选 <b>repo</b> 权限。</p>
+      </section>
+
     </div>
   </div>
 </div>
@@ -262,5 +284,6 @@
 
 <script src="web-api.js"></script>
 <script src="app.js"></script>
+<script src="sync.js"></script>
 </body>
 </html>

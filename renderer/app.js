@@ -55,12 +55,23 @@ function normalize(data) {
 }
 function scheduleSave() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => window.api.saveData(state), 500);
+  saveTimer = setTimeout(() => {
+    window.api.saveData(state);
+    if (window.ghSync) window.ghSync.onSave(); // 标记本地改动并调度云推送
+  }, 500);
 }
 function renderAll() {
   renderNotes();
   renderTasks();
 }
+
+// ---------- 云同步桥 ----------
+window.appBridge = {
+  getState: () => state,
+  applyState: (d) => { state = normalize(d); renderAll(); },
+  toast: (m, t) => toast(m, t),
+};
+
 
 // ---------- Toast ----------
 let toastTimer = null;
@@ -135,6 +146,7 @@ async function enterApp() {
   currentNotePage = 1; // 进入时显示第1页（最新内容）
   renderNotes();
   $('#btn-lock').classList.toggle('hidden', !hasPassword);
+  if (window.ghSync) window.ghSync.onEnter(); // 进入主界面后尝试拉取云端
 }
 
 // 手动锁定 / 自动锁定：清空界面数据回到封面
@@ -150,6 +162,7 @@ async function lockApp() {
   document.querySelectorAll('.modal.open').forEach((m) => m.classList.remove('open'));
   $('#cover-pass').value = '';
   await window.api.authLock();
+  if (window.ghSync) window.ghSync.onLock();
   showCover('unlock');
 }
 
