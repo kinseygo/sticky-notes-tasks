@@ -435,7 +435,11 @@ $('#notes-grid').addEventListener('focusout', (e) => {
     hideNtb();
   }, 120);
 });
-ntb.addEventListener('mousedown', (e) => e.preventDefault()); // 保持便签焦点与选区
+// 保持便签焦点与选区；但下拉框(select)需允许默认行为才能展开
+ntb.addEventListener('mousedown', (e) => {
+  if (e.target.closest('select')) return;
+  e.preventDefault();
+});
 ntb.addEventListener('change', (e) => {
   const n = ntbCurrentNote(); if (!n) return;
   if (e.target.id === 'ntb-font') n.font = e.target.value;
