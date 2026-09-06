@@ -219,6 +219,13 @@ $('#search').addEventListener('input', (e) => {
 });
 
 /* ================= 便签 ================= */
+function noteTextStyle(n) {
+  const s = [];
+  if (n.font) s.push(`font-family:${n.font}`);
+  if (n.textColor) s.push(`color:${n.textColor}`);
+  if (n.fontSize) s.push(`font-size:${n.fontSize}px`);
+  return s.join(';');
+}
 function noteHtml(n) {
   return `
   <div class="note-card c-${n.color || 'yellow'}" data-id="${n.id}">
@@ -226,7 +233,7 @@ function noteHtml(n) {
       <span class="note-date">${fmtDate(n.updatedAt || n.createdAt)}</span>
       <button class="note-recolor" title="换个颜色">🎨</button>
     </div>
-    <div class="note-text" contenteditable="true" data-placeholder="写点什么…">${escapeHtml(n.text)}</div>
+    <div class="note-text" contenteditable="true" data-placeholder="写点什么…" style="${noteTextStyle(n)}">${escapeHtml(n.text)}</div>
     <div class="note-actions">
       <button class="note-act act-tear">🗑 撕掉</button>
       <button class="note-act act-arch">📄 存入文档</button>
@@ -352,72 +359,138 @@ $('#notes-grid').addEventListener('click', (e) => {
 
 $('#btn-new-note').addEventListener('click', newNote);
 
-// ---------- 翻页音效（Web Audio 合成翻书声，无需音频文件） ----------
-let audioCtx = null;
-function playPageFlip() {
-  try {
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    const ctx = audioCtx;
-    if (ctx.state === 'suspended') ctx.resume();
-    const dur = 0.34;
-    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) {
-      const t = i / d.length;
-      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2.1) * (0.55 + 0.45 * Math.sin(t * 42));
-    }
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass'; bp.frequency.value = 1700; bp.Q.value = 0.7;
-    const hp = ctx.createBiquadFilter();
-    hp.type = 'highpass'; hp.frequency.value = 480;
-    const g = ctx.createGain();
-    const t0 = ctx.currentTime;
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(0.5, t0 + 0.035);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    src.connect(bp); bp.connect(hp); hp.connect(g); g.connect(ctx.destination);
-    src.start(t0);
-  } catch { /* 音频不可用时忽略 */ }
-}
+// 翻页按钮事件
+$('#btn-page-prev').addEventListener('click', () => {
+  if (currentNotePage > 1) { currentNotePage--; renderNotes(); }
+});
+$('#btn-page-next').addEventListener('click', () => {
+  const totalPages = Math.min(Math.ceil(state.notes.length / NOTES_PER_PAGE), MAX_PAGES);
+  if (currentNotePage < totalPages) { currentNotePage++; renderNotes(); }
+});
 
-// ---------- 翻页（向上翻书动画） ----------
-let flipping = false;
-function flipStep(dir) {
-  if (flipping) return;
-  const term = searchTerm.trim().toLowerCase();
-  const allNotes = state.notes.filter((n) => !term || (n.text || '').toLowerCase().includes(term));
-  const totalPages = Math.min(Math.ceil(allNotes.length / NOTES_PER_PAGE), MAX_PAGES);
-  const next = currentNotePage + dir;
-  if (next < 1 || next > totalPages) return;
-  currentNotePage = next;
-  playPageFlip();
-  const grid = $('#notes-grid');
-  flipping = true;
-  // 快照当前页作为“翻起的书页”
-  const snap = document.createElement('div');
-  snap.className = 'notes-grid flip-snapshot';
-  snap.innerHTML = grid.innerHTML;
-  grid.appendChild(snap);
-  [...grid.children].forEach((ch) => { if (ch !== snap) ch.remove(); });
-  // 立即渲染新一页（被快照盖住）
-  const startIdx = (currentNotePage - 1) * NOTES_PER_PAGE;
-  const pageNotes = allNotes.slice(startIdx, startIdx + NOTES_PER_PAGE);
-  grid.insertAdjacentHTML('afterbegin', pageNotes.map(noteHtml).join(''));
-  updatePager(totalPages);
-  requestAnimationFrame(() => {
-    snap.classList.add('flip-out');
-    grid.classList.add('flip-in');
-  });
-  setTimeout(() => {
-    snap.remove();
-    grid.classList.remove('flip-in');
-    flipping = false;
-  }, 580);
+// ---------- 便签格式工具条（字体 / 颜色 / 字号 / 行首符号） ----------
+const NOTE_FONTS = [
+  ['', '默认字体'],
+  ['"Microsoft YaHei", sans-serif', '微软雅黑'],
+  ['SimSun, serif', '宋体'],
+  ['SimHei, sans-serif', '黑体'],
+  ['KaiTi, serif', '楷体'],
+  ['Consolas, monospace', '等宽'],
+];
+const NOTE_COLORS = [
+  ['', '默认'], ['#d9534f', '红'], ['#e07f06', '橙'], ['#2e8b57', '绿'],
+  ['#3b6fc4', '蓝'], ['#8e5bb8', '紫'], ['#8a857a', '灰'],
+];
+const NOTE_SIZES = [[13, '小'], [15, '中'], [18, '大'], [22, '特大']];
+const LINE_SYMBOLS = ['□', '○', '●', '★', '☆', '✓', '■', '▶'];
+
+const ntb = document.createElement('div');
+ntb.id = 'note-toolbar';
+ntb.innerHTML = `
+  <div class="ntb-row">
+    <select id="ntb-font" title="字体">${NOTE_FONTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+    <select id="ntb-size" title="字号">${NOTE_SIZES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+    <span class="ntb-colors">${NOTE_COLORS.map(([v, l]) => `<button class="ntb-color${v ? '' : ' def'}" data-c="${v}" title="${l}" style="${v ? 'background:' + v : ''}">${v ? '' : '默'}</button>`).join('')}</span>
+  </div>
+  <div class="ntb-row">
+    <span class="ntb-label">行首符号</span>
+    ${LINE_SYMBOLS.map((s) => `<button class="ntb-sym" data-sym="${s}" title="在光标所在行首插入 ${s}">${s}</button>`).join('')}
+  </div>`;
+$('#page-notes').appendChild(ntb);
+
+let ntbNoteId = null;
+function ntbCurrentNote() { return state.notes.find((x) => x.id === ntbNoteId); }
+function ntbSync() {
+  const n = ntbCurrentNote(); if (!n) return;
+  $('#ntb-font').value = n.font || '';
+  $('#ntb-size').value = String(n.fontSize || 15);
+  ntb.querySelectorAll('.ntb-color').forEach((b) => b.classList.toggle('active', (b.dataset.c || '') === (n.textColor || '')));
 }
-$('#btn-page-prev').addEventListener('click', () => flipStep(-1));
-$('#btn-page-next').addEventListener('click', () => flipStep(1));
+function ntbApply() {
+  const n = ntbCurrentNote(); if (!n) return;
+  const el = document.querySelector(`.note-card[data-id="${n.id}"] .note-text`);
+  if (el) el.style.cssText = noteTextStyle(n);
+}
+function showNtb(card) {
+  ntbNoteId = card.dataset.id;
+  ntbSync();
+  ntb.classList.add('open');
+  const page = $('#page-notes');
+  const pr = page.getBoundingClientRect();
+  const cr = card.getBoundingClientRect();
+  ntb.style.left = Math.max(8, cr.left - pr.left) + 'px';
+  ntb.style.top = Math.max(4, cr.top - pr.top - ntb.offsetHeight - 6) + 'px';
+}
+function hideNtb() { ntb.classList.remove('open'); ntbNoteId = null; }
+
+$('#notes-grid').addEventListener('focusin', (e) => {
+  if (!e.target.classList || !e.target.classList.contains('note-text')) return;
+  showNtb(e.target.closest('.note-card'));
+});
+$('#notes-grid').addEventListener('focusout', (e) => {
+  if (!e.target.classList || !e.target.classList.contains('note-text')) return;
+  setTimeout(() => {
+    const a = document.activeElement;
+    if (a && (a.closest('#note-toolbar') || (a.classList && a.classList.contains('note-text')))) return;
+    hideNtb();
+  }, 120);
+});
+ntb.addEventListener('mousedown', (e) => e.preventDefault()); // 保持便签焦点与选区
+ntb.addEventListener('change', (e) => {
+  const n = ntbCurrentNote(); if (!n) return;
+  if (e.target.id === 'ntb-font') n.font = e.target.value;
+  if (e.target.id === 'ntb-size') n.fontSize = Number(e.target.value);
+  n.updatedAt = Date.now();
+  ntbApply(); scheduleSave();
+});
+ntb.addEventListener('click', (e) => {
+  const n = ntbCurrentNote(); if (!n) return;
+  const cb = e.target.closest('.ntb-color');
+  if (cb) {
+    n.textColor = cb.dataset.c || '';
+    n.updatedAt = Date.now();
+    ntbSync(); ntbApply(); scheduleSave();
+    return;
+  }
+  const sb = e.target.closest('.ntb-sym');
+  if (sb) insertLineSymbol(sb.dataset.sym);
+});
+
+// 在光标所在行首插入符号
+function insertLineSymbol(sym) {
+  const el = document.querySelector(`.note-card[data-id="${ntbNoteId}"] .note-text`);
+  if (!el) return;
+  const sel = window.getSelection();
+  let off = (el.textContent || '').length;
+  if (sel.rangeCount && el.contains(sel.anchorNode)) {
+    const r = sel.getRangeAt(0).cloneRange();
+    const pre = document.createRange();
+    pre.selectNodeContents(el);
+    pre.setEnd(r.startContainer, r.startOffset);
+    off = pre.toString().length;
+  }
+  const text = el.textContent || '';
+  const lineStart = text.lastIndexOf('\n', off - 1) + 1;
+  const insert = sym + ' ';
+  el.textContent = text.slice(0, lineStart) + insert + text.slice(lineStart);
+  // 还原光标到插入点之后
+  const pos = lineStart + insert.length;
+  const range = document.createRange();
+  let walked = 0, placed = false;
+  const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = tw.nextNode())) {
+    if (walked + node.length >= pos) { range.setStart(node, pos - walked); placed = true; break; }
+    walked += node.length;
+  }
+  if (!placed) range.setStart(el, el.childNodes.length);
+  range.collapse(true);
+  sel.removeAllRanges(); sel.addRange(range);
+  el.focus();
+  // 触发保存
+  const n = ntbCurrentNote();
+  if (n) { n.text = el.textContent; n.updatedAt = Date.now(); scheduleSave(); }
+}
 
 // 撕掉（撕纸动画 → 回收站）
 function tearNote(id) {

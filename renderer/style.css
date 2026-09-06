@@ -410,31 +410,39 @@ body.dark .chip.pri-1 { color: #d9ab4e; }
 .task-edit-actions .danger { color: #c0392b; }
 .modal-task-card { max-width: 560px; }
 
-/* ---------- 便签翻页（向上翻书）动画 ---------- */
-.notes-grid { position: relative; }
-.notes-grid.flip-snapshot {
-  position: absolute; inset: 0; margin: 0; pointer-events: none;
-  transform-origin: 50% 100%;
-  backface-visibility: hidden;
-  z-index: 5;
+
+/* ---------- 便签格式工具条 ---------- */
+#page-notes { position: relative; }
+#note-toolbar {
+  position: absolute; z-index: 60; display: none;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .16); padding: 8px 10px;
+  max-width: min(430px, calc(100vw - 40px));
 }
-.notes-grid.flip-out {
-  animation: page-flip-out .55s cubic-bezier(.55, .06, .35, .95) forwards;
+#note-toolbar.open { display: block; animation: note-in .18s ease; }
+.ntb-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.ntb-row + .ntb-row { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); }
+#ntb-font, #ntb-size {
+  padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); color: var(--text); font-size: 12.5px; outline: none;
 }
-@keyframes page-flip-out {
-  0%   { transform: perspective(1400px) rotateX(0deg); opacity: 1; filter: brightness(1); }
-  60%  { opacity: 1; }
-  100% { transform: perspective(1400px) rotateX(-96deg) translateY(-6%); opacity: 0; filter: brightness(1.12); }
+.ntb-label { font-size: 12px; color: var(--muted); }
+.ntb-colors { display: inline-flex; gap: 5px; align-items: center; }
+.ntb-color {
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid var(--line); font-size: 10px; color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: transform .15s;
 }
-.notes-grid.flip-in > .note-card {
-  animation: page-flip-in .5s cubic-bezier(.25, .8, .4, 1) both;
+.ntb-color.def { background: var(--bg); }
+.ntb-color:hover { transform: scale(1.15); }
+.ntb-color.active { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(76, 175, 125, .25); }
+.ntb-sym {
+  width: 28px; height: 28px; border-radius: 8px; font-size: 15px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  transition: all .15s;
 }
-.notes-grid.flip-in > .note-card:nth-child(2) { animation-delay: .05s; }
-.notes-grid.flip-in > .note-card:nth-child(3) { animation-delay: .1s; }
-@keyframes page-flip-in {
-  0%   { transform: perspective(1400px) rotateX(28deg) translateY(18px); opacity: 0; }
-  100% { transform: perspective(1400px) rotateX(0deg) translateY(0); opacity: 1; }
-}
+.ntb-sym:hover { border-color: var(--primary); background: rgba(76, 175, 125, .12); }
 
 /* ============ 弹窗 ============ */
 .modal {
