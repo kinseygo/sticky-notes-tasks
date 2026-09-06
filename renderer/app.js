@@ -260,9 +260,14 @@ function renderNotes() {
   const startIdx = (currentNotePage - 1) * NOTES_PER_PAGE;
   const pageNotes = allNotes.slice(startIdx, startIdx + NOTES_PER_PAGE);
 
-  grid.innerHTML = pageNotes.map(noteHtml).join('');
+  paintNotesPage(pageNotes, totalPages);
+}
 
-  // 翻页控件显示/隐藏及状态更新
+function paintNotesPage(pageNotes, totalPages) {
+  $('#notes-grid').innerHTML = pageNotes.map(noteHtml).join('');
+  updatePager(totalPages);
+}
+function updatePager(totalPages) {
   if (totalPages > 1) {
     $('#notes-pager').classList.remove('hidden');
     $('#notes-page-label').textContent = `第 ${currentNotePage} / ${totalPages} 页`;
@@ -347,14 +352,72 @@ $('#notes-grid').addEventListener('click', (e) => {
 
 $('#btn-new-note').addEventListener('click', newNote);
 
-// 翻页按钮事件
-$('#btn-page-prev').addEventListener('click', () => {
-  if (currentNotePage > 1) { currentNotePage--; renderNotes(); }
-});
-$('#btn-page-next').addEventListener('click', () => {
-  const totalPages = Math.min(Math.ceil(state.notes.length / NOTES_PER_PAGE), MAX_PAGES);
-  if (currentNotePage < totalPages) { currentNotePage++; renderNotes(); }
-});
+// ---------- 翻页音效（Web Audio 合成翻书声，无需音频文件） ----------
+let audioCtx = null;
+function playPageFlip() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = audioCtx;
+    if (ctx.state === 'suspended') ctx.resume();
+    const dur = 0.34;
+    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      const t = i / d.length;
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2.1) * (0.55 + 0.45 * Math.sin(t * 42));
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 1700; bp.Q.value = 0.7;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 480;
+    const g = ctx.createGain();
+    const t0 = ctx.currentTime;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.5, t0 + 0.035);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(bp); bp.connect(hp); hp.connect(g); g.connect(ctx.destination);
+    src.start(t0);
+  } catch { /* 音频不可用时忽略 */ }
+}
+
+// ---------- 翻页（向上翻书动画） ----------
+let flipping = false;
+function flipStep(dir) {
+  if (flipping) return;
+  const term = searchTerm.trim().toLowerCase();
+  const allNotes = state.notes.filter((n) => !term || (n.text || '').toLowerCase().includes(term));
+  const totalPages = Math.min(Math.ceil(allNotes.length / NOTES_PER_PAGE), MAX_PAGES);
+  const next = currentNotePage + dir;
+  if (next < 1 || next > totalPages) return;
+  currentNotePage = next;
+  playPageFlip();
+  const grid = $('#notes-grid');
+  flipping = true;
+  // 快照当前页作为“翻起的书页”
+  const snap = document.createElement('div');
+  snap.className = 'notes-grid flip-snapshot';
+  snap.innerHTML = grid.innerHTML;
+  grid.appendChild(snap);
+  [...grid.children].forEach((ch) => { if (ch !== snap) ch.remove(); });
+  // 立即渲染新一页（被快照盖住）
+  const startIdx = (currentNotePage - 1) * NOTES_PER_PAGE;
+  const pageNotes = allNotes.slice(startIdx, startIdx + NOTES_PER_PAGE);
+  grid.insertAdjacentHTML('afterbegin', pageNotes.map(noteHtml).join(''));
+  updatePager(totalPages);
+  requestAnimationFrame(() => {
+    snap.classList.add('flip-out');
+    grid.classList.add('flip-in');
+  });
+  setTimeout(() => {
+    snap.remove();
+    grid.classList.remove('flip-in');
+    flipping = false;
+  }, 580);
+}
+$('#btn-page-prev').addEventListener('click', () => flipStep(-1));
+$('#btn-page-next').addEventListener('click', () => flipStep(1));
 
 // 撕掉（撕纸动画 → 回收站）
 function tearNote(id) {
@@ -692,24 +755,29 @@ function sweepTasks() {
 
 function todayHtml(x) {
   const t = x.t;
+  const priCls = t.priority === 2 ? ' pri-2' : t.priority === 1 ? ' pri-1' : '';
+  const priChip = t.priority === 2 ? '<span class="chip pri-2">🔴 高</span>'
+    : t.priority === 1 ? '<span class="chip pri-1">🟡 中</span>' : '';
   return `
-  <div class="task ${x.done ? 'done' : ''}" data-id="${t.id}">
+  <div class="task${x.done ? ' done' : ''}${priCls}" data-id="${t.id}">
+    <div class="task-time"><b>${fmtTime(x.dueMs)}</b><span>${x.once ? '一次性' : '循环'}</span></div>
     <button class="task-check" title="${x.done ? '已完成' : '标记完成'}">✓</button>
     <div class="task-main">
       <div class="task-title">${escapeHtml(t.title)}</div>
       <div class="task-meta">
-        <span class="chip">${escapeHtml(recurLabel(t))}</span>
-        <span class="chip due">⏰ ${fmtTime(x.dueMs)}</span>
-        ${t.remind ? '<span class="chip">🔔 提醒</span>' : '<span class="chip">🔕 不提醒</span>'}
+        <span class="chip">${x.once ? '📌' : '🔁'} ${escapeHtml(recurLabel(t))}</span>
+        ${priChip}
+        ${t.remind ? '' : '<span class="chip">🔕 不提醒</span>'}
       </div>
     </div>
     <div class="task-actions">
-      <button class="ta-edit" title="编辑内容/时间/提醒">⋯</button>
+      <button class="ta-edit" title="编辑内容/时间/提醒">✏️</button>
       <button class="ta-del" title="删除任务">🗑</button>
     </div>
   </div>`;
 }
 
+let taskFilter = 'all';
 function renderTasks() {
   migrateTasks();
   const list = todayTasks();
@@ -724,10 +792,27 @@ function renderTasks() {
   $('#stat-done').textContent = done;
   const t0 = new Date(); t0.setHours(0, 0, 0, 0);
   $('#stat-today').textContent = state.taskLog.filter((x) => x.completedAt >= t0.getTime()).length;
-  $('#today-list').innerHTML = list.length ? list.map(todayHtml).join('')
-    : `<div class="task-empty">🎉 今天没有任务，在上方添加一个吧</div>`;
+  // 顶部日期与状态语
+  const d = new Date();
+  $('#hero-date').textContent = `${d.getMonth() + 1}月${d.getDate()}日 周${'日一二三四五六'[d.getDay()]}`;
+  $('#hero-sub').textContent = !list.length ? '今天没有安排，享受闲暇 ☕'
+    : done === list.length ? '全部完成，太棒了 🎉' : '专注当下，逐项击破 💪';
+  // 筛选渲染
+  const shown = taskFilter === 'todo' ? list.filter((x) => !x.done)
+    : taskFilter === 'done' ? list.filter((x) => x.done) : list;
+  document.querySelectorAll('.task-filter .fchip').forEach((b) => b.classList.toggle('active', b.dataset.f === taskFilter));
+  $('#today-list').innerHTML = shown.length ? shown.map(todayHtml).join('')
+    : `<div class="task-empty">${list.length ? '该筛选下暂无任务' : '🎉 今天没有任务，在上方添加一个吧'}</div>`;
   renderTaskSearch();
 }
+
+// 筛选切换
+document.querySelector('.task-filter').addEventListener('click', (e) => {
+  const b = e.target.closest('.fchip');
+  if (!b) return;
+  taskFilter = b.dataset.f;
+  renderTasks();
+});
 
 // 手动完成今日实例并归档
 function completeToday(id) {

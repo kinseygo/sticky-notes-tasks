@@ -86,9 +86,19 @@
 
   <!-- ================= 任务页 ================= -->
   <section id="page-tasks" class="page">
-    <div class="task-overview">
+    <!-- 今日概览卡 -->
+    <div class="task-hero">
+      <div class="hero-left">
+        <div class="hero-date" id="hero-date"></div>
+        <div class="hero-sub" id="hero-sub"></div>
+        <div class="hero-stats">
+          <div class="stat"><b id="stat-todo">0</b><span>待办</span></div>
+          <div class="stat"><b id="stat-done">0</b><span>已完成</span></div>
+          <div class="stat"><b id="stat-today">0</b><span>今日完成</span></div>
+        </div>
+      </div>
       <div class="ring-wrap">
-        <svg width="116" height="116" viewBox="0 0 120 120">
+        <svg width="104" height="104" viewBox="0 0 120 120">
           <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
           <circle id="ring-fg" class="ring-fg" cx="60" cy="60" r="52"></circle>
         </svg>
@@ -97,49 +107,54 @@
           <span>完成率</span>
         </div>
       </div>
-      <div class="overview-stats">
-        <div class="stat"><b id="stat-todo">0</b><span>待办</span></div>
-        <div class="stat"><b id="stat-done">0</b><span>已完成</span></div>
-        <div class="stat"><b id="stat-today">0</b><span>今日完成</span></div>
+    </div>
+
+    <!-- 快速添加 -->
+    <div class="task-composer">
+      <div class="composer-row">
+        <input id="task-input" type="text" placeholder="添加任务，回车保存…">
+        <button id="task-add-btn" class="primary-btn" title="添加任务">＋ 添加</button>
+        <button id="task-copy" class="icon-btn" title="一键复制输入内容">📋</button>
+      </div>
+      <div class="composer-opts">
+        <select id="task-type" title="重复方式">
+          <option value="once">📌 一次性</option>
+          <option value="daily">🔁 每天循环</option>
+          <option value="weekdays">🏢 工作日循环</option>
+          <option value="weekly">📅 每周某日</option>
+          <option value="monthly">🗓 每月循环</option>
+          <option value="yearly">🎂 每年循环</option>
+        </select>
+        <input id="task-time" type="time" value="09:00" class="hidden" title="提醒时间">
+        <input id="task-due" type="datetime-local" title="任务日期时间（到点自动完成归档）">
+        <select id="task-weekday" class="hidden" title="每周哪一天">
+          <option value="1">周一</option><option value="2">周二</option><option value="3">周三</option>
+          <option value="4">周四</option><option value="5">周五</option><option value="6">周六</option><option value="0">周日</option>
+        </select>
+        <select id="task-monthday" class="hidden" title="每月几号"></select>
+        <select id="task-yearmonth" class="hidden" title="每年几月"></select>
+        <select id="task-yearday" class="hidden" title="几号"></select>
+        <select id="task-priority" title="优先级">
+          <option value="0">⚪ 无优先级</option>
+          <option value="1">🟡 中</option>
+          <option value="2">🔴 高</option>
+        </select>
+        <label class="remind-label" title="到点是否提醒"><input id="task-remind" type="checkbox" checked> 到点提醒</label>
       </div>
     </div>
 
-    <div class="task-add">
-      <input id="task-input" type="text" placeholder="添加任务，回车保存…">
-      <button id="task-add-btn" class="primary-btn" title="添加任务">＋ 添加</button>
-      <button id="task-copy" class="icon-btn" title="一键复制输入内容">📋</button>
-    </div>
-    <div class="task-add task-add-opts">
-      <select id="task-type" title="重复方式">
-        <option value="once">📌 一次性</option>
-        <option value="daily">🔁 每天循环</option>
-        <option value="weekdays">🏢 每周工作日循环</option>
-        <option value="weekly">📅 每周某日循环</option>
-        <option value="monthly">🗓 每月循环</option>
-        <option value="yearly">🎂 每年循环</option>
-      </select>
-      <input id="task-time" type="time" value="09:00" class="hidden" title="提醒时间">
-      <input id="task-due" type="datetime-local" title="任务日期时间（到点自动完成归档）">
-      <select id="task-weekday" class="hidden" title="每周哪一天">
-        <option value="1">周一</option><option value="2">周二</option><option value="3">周三</option>
-        <option value="4">周四</option><option value="5">周五</option><option value="6">周六</option><option value="0">周日</option>
-      </select>
-      <select id="task-monthday" class="hidden" title="每月几号"></select>
-      <select id="task-yearmonth" class="hidden" title="每年几月"></select>
-      <select id="task-yearday" class="hidden" title="几号"></select>
-      <select id="task-priority" title="优先级">
-        <option value="0">⚪ 无优先级</option>
-        <option value="1">🟡 中</option>
-        <option value="2">🔴 高</option>
-      </select>
-      <label class="remind-label" title="到点是否提醒"><input id="task-remind" type="checkbox" checked> 到点提醒</label>
-    </div>
-
+    <!-- 全局查询 -->
     <div class="task-search-bar">
       <input id="task-search" type="text" placeholder="🔍 查询所有任务（过去 + 未来，按内容/时间）">
     </div>
     <div id="task-search-results" class="task-search-results hidden"></div>
 
+    <!-- 筛选 + 时间轴列表 -->
+    <div class="task-filter">
+      <button class="fchip active" data-f="all">全部</button>
+      <button class="fchip" data-f="todo">⏳ 待办</button>
+      <button class="fchip" data-f="done">✅ 已完成</button>
+    </div>
     <div class="task-groups">
       <div class="task-group">
         <h3 class="group-title">📆 今天的任务 <span id="today-count" class="badge"></span></h3>
