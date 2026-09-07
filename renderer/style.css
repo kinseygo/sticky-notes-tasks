@@ -177,12 +177,14 @@ main { height: calc(100vh - 66px); overflow-y: auto; }
   display: flex; justify-content: space-between; align-items: center;
 }
 .note-date { font-size: 11px; color: var(--note-text-soft); }
-.note-recolor {
+.note-top-btns { display: flex; gap: 2px; }
+.note-recolor, .note-format {
   font-size: 12px; opacity: 0; border-radius: 6px; padding: 2px 5px;
   transition: opacity .2s, background .2s;
 }
-.note-card:hover .note-recolor { opacity: .75; }
-.note-recolor:hover { opacity: 1 !important; background: rgba(0, 0, 0, .07); }
+.note-card:hover .note-recolor, .note-card:hover .note-format,
+.note-card:focus-within .note-recolor, .note-card:focus-within .note-format { opacity: .75; }
+.note-recolor:hover, .note-format:hover { opacity: 1 !important; background: rgba(0, 0, 0, .07); }
 
 .note-text {
   min-height: 64px;
@@ -443,6 +445,12 @@ body.dark .chip.pri-1 { color: #d9ab4e; }
   transition: all .15s;
 }
 .ntb-sym:hover { border-color: var(--primary); background: rgba(76, 175, 125, .12); }
+#ntb-close {
+  margin-left: auto; width: 24px; height: 24px; border-radius: 7px;
+  font-size: 12px; color: var(--muted); border: 1px solid var(--line); background: var(--bg);
+}
+#ntb-close:hover { color: var(--danger); border-color: var(--danger); }
+.ntb-hint { font-size: 11px; color: var(--muted); line-height: 1.5; }
 
 /* ============ 弹窗 ============ */
 .modal {

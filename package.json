@@ -1,6 +1,6 @@
 {
   "name": "sticky-notes-tasks",
-  "version": "1.5.0",
+  "version": "2.0.0",
   "description": "PC 便签 + 任务进度 + 云备份（WebDAV / 导出导入）",
   "main": "main.js",
   "author": "gjxin",
@@ -39,10 +39,10 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "便签与任务v1.5-Setup.${ext}"
+      "artifactName": "便签与任务v2.0-Setup.${ext}"
     },
     "portable": {
-      "artifactName": "便签与任务v1.5-portable.${ext}"
+      "artifactName": "便签与任务v2.0-portable.${ext}"
     },
     "extraResources": [
       {

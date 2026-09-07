@@ -336,21 +336,51 @@ function showTaskNotification(task) {
   }
 }
 
+// 循环任务是否适用今天
+function recurApplies(t, d) {
+  switch (t.type) {
+    case 'daily': return true;
+    case 'weekdays': return d.getDay() >= 1 && d.getDay() <= 5;
+    case 'weekly': return d.getDay() === Number(t.weekday == null ? 1 : t.weekday);
+    case 'monthly': return d.getDate() === Number(t.monthDay || 1);
+    case 'yearly': return (d.getMonth() + 1) === Number(t.yearMonth || 1) && d.getDate() === Number(t.yearDay || 1);
+    default: return false;
+  }
+}
+function pad2(n) { return String(n).padStart(2, '0'); }
+function dateKey(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+
 function checkReminders() {
   const data = readJson(dataFile(), null);
   if (!data || !Array.isArray(data.tasks)) return;
   const now = Date.now();
+  const d = new Date();
   const fired = [];
   for (const t of data.tasks) {
-    if (t.done || !t.id || !t.due) continue;
-    const key = t.id + ':' + t.due;
-    if (remindedTasks.has(key)) continue;
-    const ms = dueMs(t.due);
-    if (ms == null) continue;
-    if (now >= ms) {
-      remindedTasks.set(key, now);
-      // 只提醒“刚到点/错过不久”的；应用没开机期间早就过期的不再补发
-      if (now - ms <= 30 * 60 * 1000) fired.push({ id: t.id, title: t.title });
+    if (!t.id || t.remind === false) continue;
+    if (t.type && t.type !== 'once') {
+      // 循环任务
+      if (!recurApplies(t, d)) continue;
+      const key = t.id + ':' + dateKey(d) + ':' + (t.time || '09:00');
+      if (remindedTasks.has(key)) continue;
+      const [hh, mm] = String(t.time || '09:00').split(':').map(Number);
+      const x = new Date(d); x.setHours(hh || 0, mm || 0, 0, 0);
+      const ms = x.getTime();
+      if (now >= ms) {
+        remindedTasks.set(key, now);
+        if (now - ms <= 30 * 60 * 1000) fired.push({ id: t.id, title: t.title });
+      }
+    } else {
+      // 一次性任务（含旧数据）
+      if (t.done || !t.due) continue;
+      const key = t.id + ':' + t.due;
+      if (remindedTasks.has(key)) continue;
+      const ms = dueMs(t.due);
+      if (ms == null) continue;
+      if (now >= ms) {
+        remindedTasks.set(key, now);
+        if (now - ms <= 30 * 60 * 1000) fired.push({ id: t.id, title: t.title });
+      }
     }
   }
   fired.forEach(showTaskNotification);
@@ -361,10 +391,20 @@ function primeReminders() {
   const data = readJson(dataFile(), null);
   if (!data || !Array.isArray(data.tasks)) return;
   const now = Date.now();
+  const d = new Date();
   for (const t of data.tasks) {
-    if (t.done || !t.id || !t.due) continue;
-    const ms = dueMs(t.due);
-    if (ms != null && now >= ms) remindedTasks.set(t.id + ':' + t.due, now);
+    if (!t.id || t.remind === false) continue;
+    if (t.type && t.type !== 'once') {
+      if (!recurApplies(t, d)) continue;
+      const key = t.id + ':' + dateKey(d) + ':' + (t.time || '09:00');
+      const [hh, mm] = String(t.time || '09:00').split(':').map(Number);
+      const x = new Date(d); x.setHours(hh || 0, mm || 0, 0, 0);
+      if (now >= x.getTime()) remindedTasks.set(key, now);
+    } else {
+      if (t.done || !t.due) continue;
+      const ms = dueMs(t.due);
+      if (ms != null && now >= ms) remindedTasks.set(t.id + ':' + t.due, now);
+    }
   }
 }
 

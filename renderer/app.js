@@ -226,14 +226,21 @@ function noteTextStyle(n) {
   if (n.fontSize) s.push(`font-size:${n.fontSize}px`);
   return s.join(';');
 }
+function noteBodyHtml(n) {
+  // 富文本便签渲染 html（已净化）；旧纯文本便签转义渲染
+  return n.html ? sanitizeNoteHtml(n.html) : escapeHtml(n.text || '');
+}
 function noteHtml(n) {
   return `
   <div class="note-card c-${n.color || 'yellow'}" data-id="${n.id}">
     <div class="note-top">
       <span class="note-date">${fmtDate(n.updatedAt || n.createdAt)}</span>
-      <button class="note-recolor" title="换个颜色">🎨</button>
+      <span class="note-top-btns">
+        <button class="note-format" title="文字格式：字体/颜色/大小/行首符号">🖌</button>
+        <button class="note-recolor" title="换个颜色">🎨</button>
+      </span>
     </div>
-    <div class="note-text" contenteditable="true" data-placeholder="写点什么…" style="${noteTextStyle(n)}">${escapeHtml(n.text)}</div>
+    <div class="note-text" contenteditable="true" data-placeholder="写点什么…" style="${noteTextStyle(n)}">${noteBodyHtml(n)}</div>
     <div class="note-actions">
       <button class="note-act act-tear">🗑 撕掉</button>
       <button class="note-act act-arch">📄 存入文档</button>
@@ -243,6 +250,7 @@ function noteHtml(n) {
 }
 
 function renderNotes() {
+  if (typeof hideNtb === 'function') hideNtb();
   const grid = $('#notes-grid');
   const term = searchTerm.trim().toLowerCase();
   const allNotes = state.notes.filter((n) => !term || (n.text || '').toLowerCase().includes(term));
@@ -318,16 +326,29 @@ function enforceNotePageLimit() {
   return n;
 }
 
-// 编辑（不重渲染，保持光标）
-$('#notes-grid').addEventListener('input', (e) => {
-  if (!e.target.classList.contains('note-text')) return;
-  const card = e.target.closest('.note-card');
+// 编辑（不重渲染，保持光标）：富文本保存 html + 纯文本
+function saveNoteRich(el) {
+  const card = el.closest('.note-card');
   const n = state.notes.find((x) => x.id === card.dataset.id);
   if (!n) return;
-  n.text = e.target.textContent;
+  n.html = sanitizeNoteHtml(el.innerHTML);
+  n.text = el.innerText.replace(/\u00a0/g, ' ');
   n.updatedAt = Date.now();
   scheduleSave();
+}
+$('#notes-grid').addEventListener('input', (e) => {
+  if (!e.target.classList.contains('note-text')) return;
+  saveNoteRich(e.target);
 });
+// 粘贴净化：只保留安全格式，防止注入
+$('#notes-grid').addEventListener('paste', (e) => {
+  if (!e.target.classList || !e.target.classList.contains('note-text')) return;
+  e.preventDefault();
+  const html = e.clipboardData.getData('text/html');
+  const text = e.clipboardData.getData('text/plain');
+  if (html && html.trim()) document.execCommand('insertHTML', false, sanitizeNoteHtml(html));
+  else if (text) document.execCommand('insertText', false, text);
+}, true);
 $('#notes-grid').addEventListener('blur', (e) => {
   if (!e.target.classList || !e.target.classList.contains('note-text')) return;
   const card = e.target.closest('.note-card');
@@ -339,6 +360,7 @@ $('#notes-grid').addEventListener('click', (e) => {
   const card = e.target.closest('.note-card');
   if (!card) return;
   const id = card.dataset.id;
+  if (e.target.closest('.note-format')) return toggleNtb(card);
   if (e.target.closest('.act-tear')) return tearNote(id);
   if (e.target.closest('.act-arch')) return openCatPop(e.target.closest('.act-arch'), id);
   if (e.target.closest('.act-copy')) {
@@ -368,9 +390,62 @@ $('#btn-page-next').addEventListener('click', () => {
   if (currentNotePage < totalPages) { currentNotePage++; renderNotes(); }
 });
 
-// ---------- 便签格式工具条（字体 / 颜色 / 字号 / 行首符号） ----------
+// ---------- 富文本净化（只保留安全标签与字体样式） ----------
+const NOTE_ALLOWED_TAGS = new Set(['B', 'I', 'U', 'S', 'STRONG', 'EM', 'SPAN', 'DIV', 'BR', 'P', 'FONT']);
+const NOTE_DROP_TAGS = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'VIDEO', 'AUDIO', 'IMG', 'A', 'FORM', 'INPUT', 'BUTTON']);
+function sanitizeNoteHtml(html) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html == null ? '' : String(html);
+  (function clean(parent) {
+    [...parent.childNodes].forEach((ch) => {
+      if (ch.nodeType === 1) {
+        if (NOTE_DROP_TAGS.has(ch.tagName)) { ch.remove(); return; }
+        if (!NOTE_ALLOWED_TAGS.has(ch.tagName)) {
+          while (ch.firstChild) parent.insertBefore(ch.firstChild, ch);
+          ch.remove();
+          clean(parent);
+          return;
+        }
+        [...ch.attributes].forEach((a) => {
+          const name = a.name.toLowerCase();
+          if (name === 'style') {
+            const keep = [];
+            ch.style.cssText.split(';').forEach((decl) => {
+              const prop = (decl.split(':')[0] || '').trim().toLowerCase();
+              if (['font-family', 'color', 'font-size', 'font-weight', 'font-style', 'text-decoration'].includes(prop)) keep.push(decl.trim());
+            });
+            if (keep.length) ch.setAttribute('style', keep.join('; '));
+            else ch.removeAttribute('style');
+          } else if (ch.tagName === 'FONT' && ['color', 'face', 'size'].includes(name)) {
+            /* 保留，稍后统一转 span */
+          } else {
+            ch.removeAttribute(a.name);
+          }
+        });
+        clean(ch);
+      } else if (ch.nodeType !== 3) {
+        ch.remove();
+      }
+    });
+  })(tpl.content);
+  // <font> 统一转为 <span style>
+  tpl.content.querySelectorAll('font').forEach((f) => {
+    const span = document.createElement('span');
+    const st = [];
+    if (f.getAttribute('color')) st.push('color:' + f.getAttribute('color'));
+    if (f.getAttribute('face')) st.push('font-family:' + f.getAttribute('face'));
+    const sizeMap = { 1: '10px', 2: '13px', 3: '15px', 4: '18px', 5: '22px', 6: '26px', 7: '32px' };
+    if (f.getAttribute('size')) st.push('font-size:' + (sizeMap[f.getAttribute('size')] || '15px'));
+    if (st.length) span.setAttribute('style', st.join(';'));
+    while (f.firstChild) span.appendChild(f.firstChild);
+    f.replaceWith(span);
+  });
+  return tpl.innerHTML;
+}
+
+// ---------- 便签格式工具条（按键触发；对选中文字局部生效） ----------
 const NOTE_FONTS = [
-  ['', '默认字体'],
+  ['', '字体'],
   ['"Microsoft YaHei", sans-serif', '微软雅黑'],
   ['SimSun, serif', '宋体'],
   ['SimHei, sans-serif', '黑体'],
@@ -381,119 +456,201 @@ const NOTE_COLORS = [
   ['', '默认'], ['#d9534f', '红'], ['#e07f06', '橙'], ['#2e8b57', '绿'],
   ['#3b6fc4', '蓝'], ['#8e5bb8', '紫'], ['#8a857a', '灰'],
 ];
-const NOTE_SIZES = [[13, '小'], [15, '中'], [18, '大'], [22, '特大']];
+const NOTE_SIZES = [[0, '大小'], [13, '小'], [15, '中'], [18, '大'], [22, '特大']];
 const LINE_SYMBOLS = ['□', '○', '●', '★', '☆', '✓', '■', '▶'];
 
 const ntb = document.createElement('div');
 ntb.id = 'note-toolbar';
 ntb.innerHTML = `
   <div class="ntb-row">
-    <select id="ntb-font" title="字体">${NOTE_FONTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
-    <select id="ntb-size" title="字号">${NOTE_SIZES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
-    <span class="ntb-colors">${NOTE_COLORS.map(([v, l]) => `<button class="ntb-color${v ? '' : ' def'}" data-c="${v}" title="${l}" style="${v ? 'background:' + v : ''}">${v ? '' : '默'}</button>`).join('')}</span>
+    <select id="ntb-font" title="字体（作用于选中文字）">${NOTE_FONTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+    <select id="ntb-size" title="字号（作用于选中文字）">${NOTE_SIZES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+    <span class="ntb-colors">${NOTE_COLORS.map(([v, l]) => `<button class="ntb-color${v ? '' : ' def'}" data-c="${v}" title="${l}（作用于选中文字）" style="${v ? 'background:' + v : ''}">${v ? '' : '默'}</button>`).join('')}</span>
+    <button id="ntb-close" title="关闭">✕</button>
   </div>
   <div class="ntb-row">
     <span class="ntb-label">行首符号</span>
-    ${LINE_SYMBOLS.map((s) => `<button class="ntb-sym" data-sym="${s}" title="在光标所在行首插入 ${s}">${s}</button>`).join('')}
-  </div>`;
+    ${LINE_SYMBOLS.map((s) => `<button class="ntb-sym" data-sym="${s}" title="在光标所在行首添加/去除 ${s}">${s}</button>`).join('')}
+  </div>
+  <div class="ntb-hint">先选中文字再设字体/颜色/大小；点行首符号前，请先点击要添加的那一行</div>`;
 $('#page-notes').appendChild(ntb);
 
 let ntbNoteId = null;
-function ntbCurrentNote() { return state.notes.find((x) => x.id === ntbNoteId); }
-function ntbSync() {
-  const n = ntbCurrentNote(); if (!n) return;
-  $('#ntb-font').value = n.font || '';
-  $('#ntb-size').value = String(n.fontSize || 15);
-  ntb.querySelectorAll('.ntb-color').forEach((b) => b.classList.toggle('active', (b.dataset.c || '') === (n.textColor || '')));
-}
-function ntbApply() {
-  const n = ntbCurrentNote(); if (!n) return;
-  const el = document.querySelector(`.note-card[data-id="${n.id}"] .note-text`);
-  if (el) el.style.cssText = noteTextStyle(n);
+function activeNoteEl() {
+  return ntbNoteId ? document.querySelector(`.note-card[data-id="${ntbNoteId}"] .note-text`) : null;
 }
 function showNtb(card) {
   ntbNoteId = card.dataset.id;
-  ntbSync();
   ntb.classList.add('open');
+  $('#ntb-font').value = '';
+  $('#ntb-size').value = '0';
+  ntb.querySelectorAll('.ntb-color').forEach((b) => b.classList.remove('active'));
   const page = $('#page-notes');
   const pr = page.getBoundingClientRect();
   const cr = card.getBoundingClientRect();
-  ntb.style.left = Math.max(8, cr.left - pr.left) + 'px';
+  ntb.style.left = Math.max(8, Math.min(cr.left - pr.left, pr.width - ntb.offsetWidth - 8)) + 'px';
   ntb.style.top = Math.max(4, cr.top - pr.top - ntb.offsetHeight - 6) + 'px';
 }
 function hideNtb() { ntb.classList.remove('open'); ntbNoteId = null; }
+function toggleNtb(card) {
+  if (ntb.classList.contains('open') && ntbNoteId === card.dataset.id) { hideNtb(); return; }
+  showNtb(card);
+}
+ntb.querySelector('#ntb-close').addEventListener('click', hideNtb);
+// 点击工具条外部收起（同一张便签内点击不收起，便于先点行定位再点符号）
+document.addEventListener('mousedown', (e) => {
+  if (!ntb.classList.contains('open')) return;
+  if (ntb.contains(e.target) || e.target.closest('.note-format')) return;
+  const card = e.target.closest('.note-card');
+  if (card && card.dataset.id === ntbNoteId) return;
+  hideNtb();
+});
 
-$('#notes-grid').addEventListener('focusin', (e) => {
-  if (!e.target.classList || !e.target.classList.contains('note-text')) return;
-  showNtb(e.target.closest('.note-card'));
-});
-$('#notes-grid').addEventListener('focusout', (e) => {
-  if (!e.target.classList || !e.target.classList.contains('note-text')) return;
-  setTimeout(() => {
-    const a = document.activeElement;
-    if (a && (a.closest('#note-toolbar') || (a.classList && a.classList.contains('note-text')))) return;
-    hideNtb();
-  }, 120);
-});
-// 保持便签焦点与选区；但下拉框(select)需允许默认行为才能展开
+// 取当前便签内的有效选区
+function ntbSelection() {
+  const el = activeNoteEl();
+  if (!el) return null;
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return null;
+  const r = sel.getRangeAt(0);
+  if (!el.contains(r.commonAncestorContainer)) return null;
+  return { el, sel, r };
+}
+function ntbRequireSelection() {
+  const t = ntbSelection();
+  if (!t) { toast('请先点击便签并选中要修改的文字', 'err'); return null; }
+  if (t.r.collapsed) { toast('请先用鼠标选中要修改的文字', 'err'); return null; }
+  t.el.focus();
+  return t;
+}
+
+// 保持便签选区：拦截工具条 mousedown（下拉框除外）
 ntb.addEventListener('mousedown', (e) => {
   if (e.target.closest('select')) return;
   e.preventDefault();
 });
 ntb.addEventListener('change', (e) => {
-  const n = ntbCurrentNote(); if (!n) return;
-  if (e.target.id === 'ntb-font') n.font = e.target.value;
-  if (e.target.id === 'ntb-size') n.fontSize = Number(e.target.value);
-  n.updatedAt = Date.now();
-  ntbApply(); scheduleSave();
+  if (e.target.id === 'ntb-font') {
+    const v = e.target.value;
+    e.target.value = '';
+    if (!v) return;
+    const t = ntbRequireSelection(); if (!t) return;
+    document.execCommand('styleWithCSS', false, true);
+    document.execCommand('fontName', false, v);
+    saveNoteRich(t.el);
+    return;
+  }
+  if (e.target.id === 'ntb-size') {
+    const px = Number(e.target.value);
+    e.target.value = '0';
+    if (!px) return;
+    const t = ntbRequireSelection(); if (!t) return;
+    // 关闭 styleWithCSS，让浏览器生成 <font size="7">，再统一转成 px 的 span
+    document.execCommand('styleWithCSS', false, false);
+    document.execCommand('fontSize', false, '7');
+    document.execCommand('styleWithCSS', false, true);
+    t.el.querySelectorAll('font[size="7"]').forEach((f) => {
+      const span = document.createElement('span');
+      span.style.fontSize = px + 'px';
+      while (f.firstChild) span.appendChild(f.firstChild);
+      f.replaceWith(span);
+    });
+    saveNoteRich(t.el);
+  }
 });
 ntb.addEventListener('click', (e) => {
-  const n = ntbCurrentNote(); if (!n) return;
   const cb = e.target.closest('.ntb-color');
   if (cb) {
-    n.textColor = cb.dataset.c || '';
-    n.updatedAt = Date.now();
-    ntbSync(); ntbApply(); scheduleSave();
+    const t = ntbRequireSelection(); if (!t) return;
+    document.execCommand('styleWithCSS', false, true);
+    const color = cb.dataset.c || getComputedStyle(t.el).color;
+    document.execCommand('foreColor', false, color);
+    saveNoteRich(t.el);
     return;
   }
   const sb = e.target.closest('.ntb-sym');
   if (sb) insertLineSymbol(sb.dataset.sym);
 });
 
-// 在光标所在行首插入符号
+// 在光标所在行行首添加/去除符号（支持富文本任意行）
 function insertLineSymbol(sym) {
-  const el = document.querySelector(`.note-card[data-id="${ntbNoteId}"] .note-text`);
+  const el = activeNoteEl();
   if (!el) return;
-  const sel = window.getSelection();
-  let off = (el.textContent || '').length;
-  if (sel.rangeCount && el.contains(sel.anchorNode)) {
-    const r = sel.getRangeAt(0).cloneRange();
-    const pre = document.createRange();
-    pre.selectNodeContents(el);
-    pre.setEnd(r.startContainer, r.startOffset);
-    off = pre.toString().length;
-  }
-  const text = el.textContent || '';
-  const lineStart = text.lastIndexOf('\n', off - 1) + 1;
-  const insert = sym + ' ';
-  el.textContent = text.slice(0, lineStart) + insert + text.slice(lineStart);
-  // 还原光标到插入点之后
-  const pos = lineStart + insert.length;
-  const range = document.createRange();
-  let walked = 0, placed = false;
-  const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  let node;
-  while ((node = tw.nextNode())) {
-    if (walked + node.length >= pos) { range.setStart(node, pos - walked); placed = true; break; }
-    walked += node.length;
-  }
-  if (!placed) range.setStart(el, el.childNodes.length);
-  range.collapse(true);
-  sel.removeAllRanges(); sel.addRange(range);
   el.focus();
-  // 触发保存
-  const n = ntbCurrentNote();
-  if (n) { n.text = el.textContent; n.updatedAt = Date.now(); scheduleSave(); }
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !el.contains(sel.anchorNode)) {
+    return toast('请先点击要添加符号的那一行', 'err');
+  }
+  const marker = sym + ' ';
+  const node = sel.anchorNode;
+  const off = sel.anchorOffset;
+
+  // 去除块级行（如 <div> 行）的行首符号
+  function stripBlockHead(block) {
+    let need = marker.length;
+    for (const ch of [...block.childNodes]) {
+      if (need <= 0) break;
+      if (ch.nodeType === 3) {
+        const cut = Math.min(need, ch.length);
+        ch.deleteData(0, cut);
+        need -= cut;
+        if (!ch.length) ch.remove();
+      } else break;
+    }
+  }
+
+  if (node.nodeType === 3) {
+    const txt = node.textContent;
+    // 情况A：文本节点内含 \n 换行（旧纯文本便签）→ 按 \n 定位行首
+    if (txt.includes('\n')) {
+      const lineStart = txt.lastIndexOf('\n', off - 1) + 1;
+      if (txt.startsWith(marker, lineStart)) {
+        node.deleteData(lineStart, marker.length);
+      } else {
+        node.insertData(lineStart, marker);
+        try {
+          const nr = document.createRange();
+          nr.setStart(node, Math.min(off + marker.length, node.length));
+          nr.collapse(true);
+          sel.removeAllRanges(); sel.addRange(nr);
+        } catch { /* 忽略 */ }
+      }
+      saveNoteRich(el);
+      return;
+    }
+    // 情况B：文本节点属于某个块级行（<div>）→ 作用于该行行首
+    let block = node.parentElement;
+    while (block && block !== el && block.parentElement !== el) block = block.parentElement;
+    if (block && block !== el) {
+      if (block.textContent.startsWith(marker)) stripBlockHead(block);
+      else block.insertBefore(document.createTextNode(marker), block.firstChild);
+      saveNoteRich(el);
+      return;
+    }
+    // 情况C：平铺结构（文本 + <br> 分行）→ 行首为光标节点之前最近的 <br> 之后
+    let insertBeforeNode = el.firstChild;
+    for (const child of [...el.childNodes]) {
+      if (child === node) { insertBeforeNode = child; break; }
+      if (child.nodeName === 'BR') insertBeforeNode = child.nextSibling || null;
+    }
+    const afterText = insertBeforeNode ? (insertBeforeNode.textContent || '') : '';
+    if (afterText.startsWith(marker)) {
+      if (insertBeforeNode.nodeType === 3) insertBeforeNode.deleteData(0, marker.length);
+    } else {
+      el.insertBefore(document.createTextNode(marker), insertBeforeNode || null);
+    }
+    saveNoteRich(el);
+    return;
+  }
+
+  // 情况D：光标在元素节点上（如空行 <div><br></div>）→ 作用于该块级行
+  let block = node;
+  while (block && block !== el && block.parentElement !== el) block = block.parentElement;
+  if (block && block !== el && block.nodeType === 1) {
+    if (block.textContent.startsWith(marker)) stripBlockHead(block);
+    else block.insertBefore(document.createTextNode(marker), block.firstChild);
+    saveNoteRich(el);
+  }
 }
 
 // 撕掉（撕纸动画 → 回收站）
