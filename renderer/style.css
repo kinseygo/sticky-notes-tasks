@@ -419,8 +419,8 @@ body.dark .chip.pri-1 { color: #d9ab4e; }
   position: absolute; z-index: 60; display: none; cursor: grab;
   -webkit-user-select: none; user-select: none;
   background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, .16); padding: 6px 8px;
-  max-width: min(360px, calc(100vw - 40px));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .16); padding: 5px 7px;
+  max-width: min(320px, calc(100vw - 40px));
 }
 #note-toolbar:active { cursor: grabbing; }
 #note-toolbar.open { display: block; animation: note-in .18s ease; }
@@ -460,7 +460,6 @@ body.dark .chip.pri-1 { color: #d9ab4e; }
   font-size: 12px; color: var(--muted); border: 1px solid var(--line); background: var(--bg);
 }
 #ntb-close:hover { color: var(--danger); border-color: var(--danger); }
-.ntb-hint { font-size: 11px; color: var(--muted); line-height: 1.5; }
 
 /* ============ 弹窗 ============ */
 .modal {

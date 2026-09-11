@@ -482,7 +482,7 @@ ntb.innerHTML = `
     <span class="ntb-label">行首符号</span>
     ${LINE_SYMBOLS.map((s) => `<button class="ntb-sym" data-sym="${s}" title="在光标所在行首添加/去除 ${s}">${s}</button>`).join('')}
   </div>
-  <div class="ntb-hint">先选中文字，再设字体/颜色/大小/加粗/线条；点线条后可选线条颜色；点行首符号前，请先点击要添加的那一行</div>`;
+`;
 $('#page-notes').appendChild(ntb);
 
 let ntbNoteId = null;
