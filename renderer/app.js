@@ -120,10 +120,12 @@ function showCover(mode) {
   cover.classList.remove('hidden', 'open');
   $('#cover-unlock').classList.toggle('hidden', mode !== 'unlock');
   $('#cover-setup').classList.toggle('hidden', mode !== 'setup');
+  $('#cover-enter').classList.toggle('hidden', mode !== 'enter');
   $('#cover-err').textContent = '';
   $('#cover-err2').textContent = '';
   $('#cover-pass').classList.remove('shake');
-  setTimeout(() => $(mode === 'unlock' ? '#cover-pass' : '#cover-pass-new').focus(), 60);
+  const focusSel = mode === 'unlock' ? '#cover-pass' : mode === 'setup' ? '#cover-pass-new' : null;
+  if (focusSel) setTimeout(() => $(focusSel).focus(), 60);
 }
 
 // 解锁成功：翻页动画打开封面，同时加载数据
@@ -204,6 +206,7 @@ $('#cover-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') try
 $('#cover-setup-btn').addEventListener('click', trySetupPassword);
 $('#cover-pass-new2').addEventListener('keydown', (e) => { if (e.key === 'Enter') trySetupPassword(); });
 $('#cover-skip-btn').addEventListener('click', async () => { await openCoverWithEnter(); });
+$('#cover-enter-btn').addEventListener('click', async () => { await openCoverWithEnter(); });
 $('#btn-lock').addEventListener('click', lockApp);
 $('#btn-theme').addEventListener('click', async () => {
   config.theme = config.theme === 'dark' ? 'light' : 'dark';
@@ -480,7 +483,7 @@ ntb.innerHTML = `
   </div>
   <div class="ntb-row">
     <span class="ntb-label">行首符号</span>
-    ${LINE_SYMBOLS.map((s) => `<button class="ntb-sym" data-sym="${s}" title="在光标所在行首添加/去除 ${s}">${s}</button>`).join('')}
+    <span class="ntb-sym-row">${LINE_SYMBOLS.map((s) => `<button class="ntb-sym" data-sym="${s}" title="在光标所在行首添加/去除 ${s}">${s}</button>`).join('')}</span>
   </div>
 `;
 $('#page-notes').appendChild(ntb);
@@ -1526,7 +1529,7 @@ window.addEventListener('error', (e) => console.error('Uncaught:', e.message));
   try { st = await window.api.authStatus(); } catch { /* 主进程不可用时直接进入 */ }
   hasPassword = !!st.hasPassword;
   if (hasPassword && !st.unlocked) return showCover('unlock'); // 已启用密码且未解锁：显示密码登录框
-  // 未启用密码：隐藏密码登录框，直接进入主界面（如需启用请到 设置 → 密码保护 中设置）
-  if (!hasPassword) { $('#cover').classList.add('hidden'); return enterApp(); } // 未启用密码：隐藏封面密码框并直接进入
+  // 未启用密码：不自动进入，显示“进入”封面，需点击「进入」后才打开主界面
+  if (!hasPassword) return showCover('enter');
   await enterApp(); // 主进程已是解锁状态（如窗口重建前的会话）
 })();
