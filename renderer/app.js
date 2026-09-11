@@ -412,7 +412,7 @@ function sanitizeNoteHtml(html) {
             const keep = [];
             ch.style.cssText.split(';').forEach((decl) => {
               const prop = (decl.split(':')[0] || '').trim().toLowerCase();
-              if (['font-family', 'color', 'font-size', 'font-weight', 'font-style', 'text-decoration'].includes(prop)) keep.push(decl.trim());
+              if (['font-family', 'color', 'font-size', 'font-weight', 'font-style', 'text-decoration', 'text-decoration-line', 'text-decoration-style', 'text-decoration-color'].includes(prop)) keep.push(decl.trim());
             });
             if (keep.length) ch.setAttribute('style', keep.join('; '));
             else ch.removeAttribute('style');
@@ -461,18 +461,28 @@ const LINE_SYMBOLS = ['□', '○', '●', '★', '☆', '✓', '■', '▶'];
 
 const ntb = document.createElement('div');
 ntb.id = 'note-toolbar';
+// 线条样式（文字下方）可选项：[值, 显示名]
+const NOTE_LINES = [
+  ['', '无线条'], ['solid', '实线'], ['wavy', '波浪线'], ['dashed', '虚线'], ['double', '双线'],
+];
 ntb.innerHTML = `
   <div class="ntb-row">
     <select id="ntb-font" title="字体（作用于选中文字）">${NOTE_FONTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
     <select id="ntb-size" title="字号（作用于选中文字）">${NOTE_SIZES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
-    <span class="ntb-colors">${NOTE_COLORS.map(([v, l]) => `<button class="ntb-color${v ? '' : ' def'}" data-c="${v}" title="${l}（作用于选中文字）" style="${v ? 'background:' + v : ''}">${v ? '' : '默'}</button>`).join('')}</span>
+    <button id="ntb-bold" class="ntb-bold" title="加粗（作用于选中文字）">B</button>
+    <span class="ntb-colors">${NOTE_COLORS.map(([v, l]) => `<button class="ntb-color${v ? '' : ' def'}" data-c="${v}" title="${l}（文字颜色，作用于选中文字）" style="${v ? 'background:' + v : ''}">${v ? '' : '字'}</button>`).join('')}</span>
     <button id="ntb-close" title="关闭">✕</button>
+  </div>
+  <div class="ntb-row">
+    <span class="ntb-label">线条</span>
+    <select id="ntb-line" title="文字下方线条（作用于选中文字）">${NOTE_LINES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+    <span class="ntb-colors ntb-line-colors">${NOTE_COLORS.map(([v, l]) => `<button class="ntb-color ntb-line-color${v ? '' : ' def'}" data-c="${v}" title="${l}（线条颜色）" style="${v ? 'background:' + v : ''}">${v ? '' : '线'}</button>`).join('')}</span>
   </div>
   <div class="ntb-row">
     <span class="ntb-label">行首符号</span>
     ${LINE_SYMBOLS.map((s) => `<button class="ntb-sym" data-sym="${s}" title="在光标所在行首添加/去除 ${s}">${s}</button>`).join('')}
   </div>
-  <div class="ntb-hint">先选中文字再设字体/颜色/大小；点行首符号前，请先点击要添加的那一行</div>`;
+  <div class="ntb-hint">先选中文字，再设字体/颜色/大小/加粗/线条；点线条后可选线条颜色；点行首符号前，请先点击要添加的那一行</div>`;
 $('#page-notes').appendChild(ntb);
 
 let ntbNoteId = null;
@@ -484,6 +494,7 @@ function showNtb(card) {
   ntb.classList.add('open');
   $('#ntb-font').value = '';
   $('#ntb-size').value = '0';
+  $('#ntb-line').value = '';
   ntb.querySelectorAll('.ntb-color').forEach((b) => b.classList.remove('active'));
   const page = $('#page-notes');
   const pr = page.getBoundingClientRect();
@@ -524,6 +535,53 @@ function ntbRequireSelection() {
   return t;
 }
 
+// 线条颜色（当前记录）
+let activeLineColor = '';
+// 将当前选区包成 span（设置文本下线条等样式）
+function wrapSelectionWithSpan(styleStr) {
+  const t = ntbRequireSelection(); if (!t) return false;
+  const span = document.createElement('span');
+  span.setAttribute('style', styleStr);
+  const frag = t.r.extractContents();
+  span.appendChild(frag);
+  t.r.insertNode(span);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  const nr = document.createRange();
+  nr.selectNodeContents(span); nr.collapse(false);
+  sel.addRange(nr);
+  saveNoteRich(t.el);
+  return true;
+}
+// 清除选中文字的下划线（遍历选区内的元素移除 text-decoration*）
+function removeLineFrom(el, range) {
+  let changed = false;
+  el.querySelectorAll('*').forEach((node) => {
+    if (range.intersectsNode(node)) {
+      const st = node.style;
+      st.removeProperty('text-decoration');
+      st.removeProperty('text-decoration-line');
+      st.removeProperty('text-decoration-style');
+      st.removeProperty('text-decoration-color');
+      if (!(node.getAttribute('style') || '').trim()) node.removeAttribute('style');
+      changed = true;
+    }
+  });
+  if (changed) saveNoteRich(el);
+  return true;
+}
+// 应用线条：line='' 清除，否则在选中文字下方加对应线条 + 记录的颜色
+function applyLine(line) {
+  const t = ntbSelection();
+  if (!t || t.r.collapsed) { toast('请先选中要加线条的文字', 'err'); return; }
+  t.el.focus();
+  if (line === undefined) line = $('#ntb-line').value;
+  if (!line) return removeLineFrom(t.el, t.r);
+  const styleStr = `text-decoration-line: underline; text-decoration-style: ${line};` +
+    (activeLineColor ? ` text-decoration-color: ${activeLineColor};` : '');
+  wrapSelectionWithSpan(styleStr);
+}
+
 // 保持便签选区：拦截工具条 mousedown（下拉框除外）
 ntb.addEventListener('mousedown', (e) => {
   if (e.target.closest('select')) return;
@@ -538,6 +596,12 @@ ntb.addEventListener('change', (e) => {
     document.execCommand('styleWithCSS', false, true);
     document.execCommand('fontName', false, v);
     saveNoteRich(t.el);
+    return;
+  }
+  if (e.target.id === 'ntb-line') {
+    const line = e.target.value;
+    e.target.value = '';
+    applyLine(line);
     return;
   }
   if (e.target.id === 'ntb-size') {
@@ -559,7 +623,7 @@ ntb.addEventListener('change', (e) => {
   }
 });
 ntb.addEventListener('click', (e) => {
-  const cb = e.target.closest('.ntb-color');
+  const cb = e.target.closest('.ntb-color:not(.ntb-line-color)');
   if (cb) {
     const t = ntbRequireSelection(); if (!t) return;
     document.execCommand('styleWithCSS', false, true);
@@ -569,7 +633,28 @@ ntb.addEventListener('click', (e) => {
     return;
   }
   const sb = e.target.closest('.ntb-sym');
-  if (sb) insertLineSymbol(sb.dataset.sym);
+  if (sb) { insertLineSymbol(sb.dataset.sym); return; }
+  const bd = e.target.closest('#ntb-bold');
+  if (bd) {
+    const t = ntbRequireSelection(); if (!t) return;
+    document.execCommand('styleWithCSS', false, true);
+    document.execCommand('bold', false, null);
+    saveNoteRich(t.el);
+    return;
+  }
+  const lc = e.target.closest('.ntb-line-color');
+  if (lc) {
+    activeLineColor = lc.dataset.c || '';
+    ntb.querySelectorAll('.ntb-line-color').forEach((b) => b.classList.toggle('active', b.dataset.c === activeLineColor));
+    // 若已选线条类型则立即应用；否则默认按"实线"应用颜色
+    const line = $('#ntb-line').value;
+    if (line) applyLine();
+    else if (ntbSelection() && !ntbSelection().r.collapsed) {
+      $('#ntb-line').value = 'solid';
+      applyLine();
+    }
+    return;
+  }
 });
 
 // 在光标所在行行首添加/去除符号（支持富文本任意行）
@@ -1422,7 +1507,8 @@ window.addEventListener('error', (e) => console.error('Uncaught:', e.message));
   let st = { hasPassword: false, unlocked: false };
   try { st = await window.api.authStatus(); } catch { /* 主进程不可用时直接进入 */ }
   hasPassword = !!st.hasPassword;
-  if (hasPassword && !st.unlocked) return showCover('unlock'); // 数据等解锁后再加载
-  if (!hasPassword) return showCover('setup');                 // 首次使用：设置或跳过密码
+  if (hasPassword && !st.unlocked) return showCover('unlock'); // 已启用密码且未解锁：显示密码登录框
+  // 未启用密码：隐藏密码登录框，直接进入主界面（如需启用请到 设置 → 密码保护 中设置）
+  if (!hasPassword) { $('#cover').classList.add('hidden'); return enterApp(); } // 未启用密码：隐藏封面密码框并直接进入
   await enterApp(); // 主进程已是解锁状态（如窗口重建前的会话）
 })();

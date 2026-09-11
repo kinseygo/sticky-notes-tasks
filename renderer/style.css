@@ -424,7 +424,7 @@ body.dark .chip.pri-1 { color: #d9ab4e; }
 #note-toolbar.open { display: block; animation: note-in .18s ease; }
 .ntb-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .ntb-row + .ntb-row { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); }
-#ntb-font, #ntb-size {
+#ntb-font, #ntb-size, #ntb-line {
   padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px;
   background: var(--bg); color: var(--text); font-size: 12.5px; outline: none;
 }
@@ -445,6 +445,14 @@ body.dark .chip.pri-1 { color: #d9ab4e; }
   transition: all .15s;
 }
 .ntb-sym:hover { border-color: var(--primary); background: rgba(76, 175, 125, .12); }
+.ntb-bold {
+  width: 28px; height: 28px; border-radius: 8px; font-size: 15px; font-weight: 700;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  transition: all .15s; line-height: 1;
+}
+.ntb-bold:hover { border-color: var(--primary); background: rgba(76, 175, 125, .12); }
+.ntb-line-color { border-style: dashed; }
+.ntb-line-color.active { border-color: var(--primary); border-style: solid; box-shadow: 0 0 0 2px rgba(76, 175, 125, .25); }
 #ntb-close {
   margin-left: auto; width: 24px; height: 24px; border-radius: 7px;
   font-size: 12px; color: var(--muted); border: 1px solid var(--line); background: var(--bg);
