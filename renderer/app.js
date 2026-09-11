@@ -499,8 +499,12 @@ function showNtb(card) {
   const page = $('#page-notes');
   const pr = page.getBoundingClientRect();
   const cr = card.getBoundingClientRect();
+  const ntbH = ntb.offsetHeight;
+  const above = cr.top - pr.top;                       // 便签上方可用高度
+  let top = above - ntbH - 6;                          // 优先放到便签上方
+  if (above - 6 < ntbH + 4) top = cr.top - pr.top + cr.height + 6; // 上方放不下则放便签下方
   ntb.style.left = Math.max(8, Math.min(cr.left - pr.left, pr.width - ntb.offsetWidth - 8)) + 'px';
-  ntb.style.top = Math.max(4, cr.top - pr.top - ntb.offsetHeight - 6) + 'px';
+  ntb.style.top = Math.max(4, Math.min(top, pr.height - ntbH - 4)) + 'px';
 }
 function hideNtb() { ntb.classList.remove('open'); ntbNoteId = null; }
 function toggleNtb(card) {
@@ -583,10 +587,24 @@ function applyLine(line) {
 }
 
 // 保持便签选区：拦截工具条 mousedown（下拉框除外）
+window.__ntbDrag = null; // 拖拽工具条的状态
 ntb.addEventListener('mousedown', (e) => {
-  if (e.target.closest('select')) return;
+  if (e.target.closest('select') || e.target.closest('button')) return; // 下拉框/按钮保留原交互
   e.preventDefault();
+  // 空白区拖动工具条，避免遮住文字
+  const pr = $('#page-notes').getBoundingClientRect();
+  const b0 = ntb.getBoundingClientRect();
+  window.__ntbDrag = { sx: e.clientX, sy: e.clientY, left: b0.left - pr.left, top: b0.top - pr.top, pw: pr.width, ph: pr.height };
 });
+document.addEventListener('mousemove', (e) => {
+  if (!window.__ntbDrag) return;
+  const d = window.__ntbDrag;
+  const nx = d.left + (e.clientX - d.sx);
+  const ny = d.top + (e.clientY - d.sy);
+  ntb.style.left = Math.max(8, Math.min(nx, d.pw - ntb.offsetWidth - 8)) + 'px';
+  ntb.style.top = Math.max(4, Math.min(ny, d.ph - ntb.offsetHeight - 4)) + 'px';
+});
+document.addEventListener('mouseup', () => { window.__ntbDrag = null; });
 ntb.addEventListener('change', (e) => {
   if (e.target.id === 'ntb-font') {
     const v = e.target.value;
